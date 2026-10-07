@@ -4,6 +4,7 @@
 Reads the original CSVs (never modifies them) and writes modified copies.
 Only the stat value column is changed; costs, ids and formatting are kept as-is.
 Penalties (negative values) are flipped to positive before scaling.
+Grenade damage/healing mods get their own, larger multiplier.
 """
 import argparse
 import sys
@@ -12,6 +13,10 @@ from pathlib import Path
 
 VALUE_COLUMNS = ("ModificationValue", "MaxModificationValue")
 STAT_COLUMN = "ModifiedStatName"
+TYPE_COLUMN = "WeaponType"
+# Grenade weapon types (frag and stim; the data does not say which is which) and the stats boosted further.
+GRENADE_TYPES = {"7", "15"}
+GRENADE_STATS = {"WeaponDamage", "WeaponHealing"}
 # Fraction stats are capped at 90%.
 FRACTION_CAPS = {"Evasion": Decimal("0.9"), "Resilience": Decimal("0.9")}
 
@@ -28,12 +33,13 @@ def format_like(value, original):
     return text
 
 
-def scale_file(src, dst, factor, cap):
+def scale_file(src, dst, factor, cap, grenade_factor):
     raw = src.read_bytes().decode("utf-8")
     newline = "\r\n" if "\r\n" in raw else "\n"
     lines = raw.split(newline)
     header = [unquote(t) for t in lines[0].split(",")]
     stat_i = header.index(STAT_COLUMN)
+    type_i = header.index(TYPE_COLUMN) if TYPE_COLUMN in header else None
     value_i = next(header.index(c) for c in VALUE_COLUMNS if c in header)
 
     stats = {}  # stat -> [scaled, kept (zero), capped, flipped]
@@ -48,13 +54,14 @@ def scale_file(src, dst, factor, cap):
         stat = unquote(tokens[stat_i])
         original = unquote(tokens[value_i])
         value = Decimal(original)
-        counts = stats.setdefault(stat, [0, 0, 0, 0])
+        is_grenade = type_i is not None and unquote(tokens[type_i]) in GRENADE_TYPES and stat in GRENADE_STATS
+        counts = stats.setdefault(stat + (" (grenade)" if is_grenade else ""), [0, 0, 0, 0])
         if value == 0:
             counts[1] += 1
         else:
             if value < 0:  # penalty (e.g. -2 magazine) becomes a bonus
                 counts[3] += 1
-            scaled = abs(value) * factor
+            scaled = abs(value) * (grenade_factor if is_grenade else factor)
             if cap and stat in FRACTION_CAPS:
                 limit = max(FRACTION_CAPS[stat], abs(value))
                 if scaled > limit:
@@ -74,6 +81,8 @@ def main():
     parser.add_argument("inputs", nargs="*", type=Path, help="CSV files (default: original/*.csv)")
     parser.add_argument("--out", type=Path, default=Path("mod"), help="output folder (default: mod)")
     parser.add_argument("--factor", type=Decimal, default=Decimal(3), help="multiplier (default: 3)")
+    parser.add_argument("--grenade-factor", type=Decimal, default=Decimal(6),
+                        help="multiplier for frag/stim grenade damage and healing (default: 6)")
     parser.add_argument("--no-cap", action="store_true", help="allow Evasion/Resilience above 90%%")
     args = parser.parse_args()
 
@@ -81,11 +90,12 @@ def main():
     if not inputs:
         sys.exit("No input CSVs found. Put the originals in original/ or pass them as arguments.")
     for src in inputs:
-        stats = scale_file(src, args.out / src.name, args.factor, not args.no_cap)
+        stats = scale_file(src, args.out / src.name, args.factor, not args.no_cap, args.grenade_factor)
         print(f"{src.name}")
         for stat, (scaled, kept, capped, flipped) in sorted(stats.items()):
             notes = (f", {flipped} penalties flipped" if flipped else "") + (f", {capped} capped at 90%" if capped else "")
-            print(f"  {stat:28} x{args.factor}: {scaled:4} rows, {kept:3} zero{notes}")
+            mult = args.grenade_factor if "(grenade)" in stat else args.factor
+            print(f"  {stat:28} x{mult}: {scaled:4} rows, {kept:3} zero{notes}")
 
 
 if __name__ == "__main__":

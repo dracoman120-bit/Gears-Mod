@@ -21,6 +21,7 @@ Game updates may overwrite the files; re-copy them afterwards. Keep it to single
 - Every positive stat value is multiplied by 3 (damage, accuracy, crit chance, crit multiplier, range, magazine size, healing, health, evasion, resilience, defence, movement).
 - Penalties (e.g. -2 magazine size, -40 damage, -15 crit chance, -1 movement) are flipped to positive and then tripled, so they become bonuses too (-2 magazine becomes +6). Zero values stay zero.
 - Evasion and Resilience are capped at 90%. Use `--no-cap` to disable.
+- Frag/stim grenade mods (weapon types 7 and 15) get **6x** on damage and healing instead of 3x. The data doesn't say which of the two types is frag and which is stim, so both are boosted; the unused stat on each has no effect. The other grenade-slot item (type 6) stays at 3x. Change this with `--grenade-factor`.
 - Research, equip and scrap costs are unchanged.
 
 ## Rebuild or change the multiplier

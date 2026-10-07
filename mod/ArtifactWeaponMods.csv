@@ -163,7 +163,7 @@
 162,8,2,0,"WeaponDamage",292.5,.2
 163,8,2,1,"WeaponDamage",292.5,.2
 164,8,3,1,"WeaponDamage",292.5,.2
-165,7,6,1,"WeaponDamage",1500,.2
-166,7,6,0,"WeaponHealing",450,.2
-167,15,6,0,"WeaponHealing",450,.2
-168,15,6,1,"WeaponDamage",1500,.2
+165,7,6,1,"WeaponDamage",3000,.2
+166,7,6,0,"WeaponHealing",900,.2
+167,15,6,0,"WeaponHealing",900,.2
+168,15,6,1,"WeaponDamage",3000,.2
