@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Scale the stat bonuses of Gears Tactics weapon mods, attachments, armour and grenades.
+
+Reads the original CSVs (never modifies them) and writes modified copies.
+Only the stat value column is changed; costs, ids and formatting are kept as-is.
+"""
+import argparse
+import sys
+from decimal import Decimal
+from pathlib import Path
+
+VALUE_COLUMNS = ("ModificationValue", "MaxModificationValue")
+STAT_COLUMN = "ModifiedStatName"
+# Fraction stats that make no sense above 100%.
+FRACTION_CAPS = {"Evasion": Decimal(1), "Resilience": Decimal(1)}
+
+
+def unquote(token):
+    return token[1:-1] if len(token) >= 2 and token[0] == token[-1] == '"' else token
+
+
+def format_like(value, original):
+    """Format `value` the way the game's export does (no trailing zeros, ".5" vs "0.5")."""
+    text = format(value.normalize(), "f")
+    if original.lstrip("-").startswith(".") and text.lstrip("-").startswith("0."):
+        text = text.replace("0.", ".", 1)
+    return text
+
+
+def scale_file(src, dst, factor, cap):
+    raw = src.read_bytes().decode("utf-8")
+    newline = "\r\n" if "\r\n" in raw else "\n"
+    lines = raw.split(newline)
+    header = [unquote(t) for t in lines[0].split(",")]
+    stat_i = header.index(STAT_COLUMN)
+    value_i = next(header.index(c) for c in VALUE_COLUMNS if c in header)
+
+    stats = {}  # stat -> [scaled, kept (penalty/zero), capped]
+    out = [lines[0]]
+    for number, line in enumerate(lines[1:], start=2):
+        if not line.strip():
+            out.append(line)
+            continue
+        tokens = line.split(",")
+        if len(tokens) != len(header):
+            sys.exit(f"{src.name}:{number}: expected {len(header)} columns, got {len(tokens)}")
+        stat = unquote(tokens[stat_i])
+        original = unquote(tokens[value_i])
+        value = Decimal(original)
+        counts = stats.setdefault(stat, [0, 0, 0])
+        if value <= 0:  # leave zeros and penalties (e.g. -2 magazine) untouched
+            counts[1] += 1
+        else:
+            scaled = value * factor
+            if cap and stat in FRACTION_CAPS:
+                limit = max(FRACTION_CAPS[stat], value)
+                if scaled > limit:
+                    scaled = limit
+                    counts[2] += 1
+            counts[0] += 1
+            tokens[value_i] = format_like(scaled, original)
+        out.append(",".join(tokens))
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(newline.join(out).encode("utf-8"))
+    return stats
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("inputs", nargs="*", type=Path, help="CSV files (default: original/*.csv)")
+    parser.add_argument("--out", type=Path, default=Path("mod"), help="output folder (default: mod)")
+    parser.add_argument("--factor", type=Decimal, default=Decimal(3), help="multiplier (default: 3)")
+    parser.add_argument("--no-cap", action="store_true", help="allow Evasion/Resilience above 100%%")
+    args = parser.parse_args()
+
+    inputs = args.inputs or sorted(Path("original").glob("*.csv"))
+    if not inputs:
+        sys.exit("No input CSVs found. Put the originals in original/ or pass them as arguments.")
+    for src in inputs:
+        stats = scale_file(src, args.out / src.name, args.factor, not args.no_cap)
+        print(f"{src.name}")
+        for stat, (scaled, kept, capped) in sorted(stats.items()):
+            note = f", {capped} capped at 100%" if capped else ""
+            print(f"  {stat:28} x{args.factor}: {scaled:4} rows, {kept:3} left alone{note}")
+
+
+if __name__ == "__main__":
+    main()
