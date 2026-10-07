@@ -29,7 +29,8 @@ Game updates may overwrite the files; re-copy them afterwards. Keep it to single
 ```
 python3 scripts/scale_mods.py                 # original/*.csv -> mod/*.csv, 3x
 python3 scripts/scale_mods.py --factor 2      # different multiplier
-python3 scripts/scale_mods.py --no-cap        # allow Evasion/Resilience above 100%
+python3 scripts/scale_mods.py --grenade-factor 10   # different grenade damage/healing multiplier
+python3 scripts/scale_mods.py --no-cap        # allow Evasion/Resilience above 90%
 ```
 
 The script always reads from `original/`, so running it repeatedly never compounds the multiplier.
