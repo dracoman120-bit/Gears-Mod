@@ -19,8 +19,8 @@ Game updates may overwrite the files; re-copy them afterwards. Keep it to single
 ## What changes
 
 - Every positive stat value is multiplied by 3 (damage, accuracy, crit chance, crit multiplier, range, magazine size, healing, health, evasion, resilience, defence, movement).
-- Penalties (e.g. -2 magazine size, -40 damage) and zero values are left alone, so drawbacks don't get tripled.
-- Evasion and Resilience are capped at 100%. Without the cap, some values would exceed 1.0, which the game may not handle well. Use `--no-cap` to disable.
+- Penalties (e.g. -2 magazine size, -40 damage, -15 crit chance, -1 movement) are flipped to positive and then tripled, so they become bonuses too (-2 magazine becomes +6). Zero values stay zero.
+- Evasion and Resilience are capped at 90%. Use `--no-cap` to disable.
 - Research, equip and scrap costs are unchanged.
 
 ## Rebuild or change the multiplier

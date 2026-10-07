@@ -3,6 +3,7 @@
 
 Reads the original CSVs (never modifies them) and writes modified copies.
 Only the stat value column is changed; costs, ids and formatting are kept as-is.
+Penalties (negative values) are flipped to positive before scaling.
 """
 import argparse
 import sys
@@ -11,8 +12,8 @@ from pathlib import Path
 
 VALUE_COLUMNS = ("ModificationValue", "MaxModificationValue")
 STAT_COLUMN = "ModifiedStatName"
-# Fraction stats that make no sense above 100%.
-FRACTION_CAPS = {"Evasion": Decimal(1), "Resilience": Decimal(1)}
+# Fraction stats are capped at 90%.
+FRACTION_CAPS = {"Evasion": Decimal("0.9"), "Resilience": Decimal("0.9")}
 
 
 def unquote(token):
@@ -35,7 +36,7 @@ def scale_file(src, dst, factor, cap):
     stat_i = header.index(STAT_COLUMN)
     value_i = next(header.index(c) for c in VALUE_COLUMNS if c in header)
 
-    stats = {}  # stat -> [scaled, kept (penalty/zero), capped]
+    stats = {}  # stat -> [scaled, kept (zero), capped, flipped]
     out = [lines[0]]
     for number, line in enumerate(lines[1:], start=2):
         if not line.strip():
@@ -47,13 +48,15 @@ def scale_file(src, dst, factor, cap):
         stat = unquote(tokens[stat_i])
         original = unquote(tokens[value_i])
         value = Decimal(original)
-        counts = stats.setdefault(stat, [0, 0, 0])
-        if value <= 0:  # leave zeros and penalties (e.g. -2 magazine) untouched
+        counts = stats.setdefault(stat, [0, 0, 0, 0])
+        if value == 0:
             counts[1] += 1
         else:
-            scaled = value * factor
+            if value < 0:  # penalty (e.g. -2 magazine) becomes a bonus
+                counts[3] += 1
+            scaled = abs(value) * factor
             if cap and stat in FRACTION_CAPS:
-                limit = max(FRACTION_CAPS[stat], value)
+                limit = max(FRACTION_CAPS[stat], abs(value))
                 if scaled > limit:
                     scaled = limit
                     counts[2] += 1
@@ -71,7 +74,7 @@ def main():
     parser.add_argument("inputs", nargs="*", type=Path, help="CSV files (default: original/*.csv)")
     parser.add_argument("--out", type=Path, default=Path("mod"), help="output folder (default: mod)")
     parser.add_argument("--factor", type=Decimal, default=Decimal(3), help="multiplier (default: 3)")
-    parser.add_argument("--no-cap", action="store_true", help="allow Evasion/Resilience above 100%%")
+    parser.add_argument("--no-cap", action="store_true", help="allow Evasion/Resilience above 90%%")
     args = parser.parse_args()
 
     inputs = args.inputs or sorted(Path("original").glob("*.csv"))
@@ -80,9 +83,9 @@ def main():
     for src in inputs:
         stats = scale_file(src, args.out / src.name, args.factor, not args.no_cap)
         print(f"{src.name}")
-        for stat, (scaled, kept, capped) in sorted(stats.items()):
-            note = f", {capped} capped at 100%" if capped else ""
-            print(f"  {stat:28} x{args.factor}: {scaled:4} rows, {kept:3} left alone{note}")
+        for stat, (scaled, kept, capped, flipped) in sorted(stats.items()):
+            notes = (f", {flipped} penalties flipped" if flipped else "") + (f", {capped} capped at 90%" if capped else "")
+            print(f"  {stat:28} x{args.factor}: {scaled:4} rows, {kept:3} zero{notes}")
 
 
 if __name__ == "__main__":
